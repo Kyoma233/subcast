@@ -1021,6 +1021,14 @@ pub fn run() {
             let ui_data = data.clone();
             if let Some(v) = db::get_setting(&conn, "remote-config")?.and_then(|r| serde_json::from_str::<Value>(&r).ok()) { apply_config(&v); }
             app.manage(AppState { db: Mutex::new(conn), data, jobs: Mutex::new(HashMap::new()) });
+            // On phones a single webview is configured in tauri.android.conf.json; make sure it exists, so a
+            // config that fails to merge cannot leave the app on a blank screen.
+            #[cfg(mobile)]
+            if app.get_webview_window("main").is_none() {
+                tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
+                    .title("SubCast")
+                    .build()?;
+            }
             // On phones the single webview comes from tauri.android.conf.json, so only the desktop window is built here.
             #[cfg(desktop)]
             {

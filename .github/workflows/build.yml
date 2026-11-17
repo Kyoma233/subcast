@@ -34,6 +34,9 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+      - name: macOS deployment target
+        if: startsWith(matrix.platform, 'macos')
+        run: echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
       - name: Linux dependencies
         if: startsWith(matrix.platform, 'ubuntu')
         run: |

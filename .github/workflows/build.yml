@@ -16,6 +16,9 @@ jobs:
             args: ""
           - platform: ubuntu-22.04
             args: ""
+          # Kyoma233 fork only: an unsigned Apple Silicon build (upstream signs and notarizes macOS locally).
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
     runs-on: ${{ matrix.platform }}
     permissions:
       contents: write
@@ -26,6 +29,8 @@ jobs:
           node-version: 22
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin' || '' }}
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
@@ -52,9 +57,6 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Signs the updater packages; the matching public key is in tauri.conf.json.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: SubCast ${{ github.ref_name }}

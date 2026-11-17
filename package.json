@@ -2,7 +2,7 @@
   "name": "subcast",
   "private": true,
   "license": "AGPL-3.0-only",
-  "version": "0.2.6",
+  "version": "0.2.7-bili.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

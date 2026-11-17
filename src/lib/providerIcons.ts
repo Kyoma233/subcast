@@ -7,6 +7,7 @@ const BY_ID: Record<string, string> = {
   "cli-claude": "claude-color", "cli-codex": "codex-color", "cli-antigravity": "antigravity-color", "cli-gemini": "gemini-color",
   "cli-qwen": "qwen-color", "cli-kimi": "kimi-color", "cli-opencode": "opencode",
   deepseek: "deepseek-color", siliconflow: "siliconcloud-color", openrouter: "openrouter", "opencode-go": "opencode", anthropic: "claude-color",
+  bilibili: "bilibiliindex",
   openai: "openai", "google-gemini": "gemini-color", moonshot: "kimi-color", zhipu: "zhipu-color", "qwen-cn": "qwen-color", doubao: "doubao-color",
   "minimax-cn": "minimax-color", stepfun: "stepfun-color", qianfan: "wenxin-color", hunyuan: "hunyuan-color", mimo: "xiaomimimo", xai: "grok",
   mistral: "mistral-color", groq: "groq", perplexity: "perplexity-color", nvidia: "nvidia-color", together: "together-color",

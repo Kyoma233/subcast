@@ -22,7 +22,7 @@ function Mark({ id, name, size = 28 }: { id: string; name: string; size?: number
   return <span className="ms-mark" style={{ width: size, height: size, fontSize: size * 0.4 }} aria-hidden>{letters}</span>;
 }
 
-const RECOMMENDED = ["deepseek", "siliconflow", "openrouter"];
+const RECOMMENDED = ["bilibili", "deepseek", "siliconflow", "openrouter"];
 
 const STATUS: Record<FoundAgent["login"], { text: string; tone: "ok" | "warn" | "idle" }> = {
   ready: { text: tk("可用"), tone: "ok" },
@@ -60,7 +60,11 @@ export function ModelSettings({ ProviderEditor }: { ProviderEditor: (props: { p:
     ...(found ?? []).map((f) => ({ id: agentProviderId(f.kind), name: AGENTS[f.kind].name })),
     ...apiProviders.filter(ready).map((x) => ({ id: x.id, name: tr(x.name) })),
   ];
-  const withCurrent = (id: string) => (choices.some((c) => c.id === id) || !settings.providers[id] ? choices : [...choices, { id, name: nameOf(id) }]);
+  // A translation-only model can't answer questions, so it is offered for subtitles only.
+  const chatChoices = choices.filter((c) => !settings.providers[c.id]?.translateOnly);
+  const withCurrent = (id: string, from = choices) =>
+    (from.some((c) => c.id === id) || !settings.providers[id] ? from : [...from, { id, name: nameOf(id) }]);
+  const translateOnly = Boolean(settings.providers[settings.translateProvider]?.translateOnly);
 
   return (
     <div className="ms">
@@ -97,7 +101,7 @@ export function ModelSettings({ ProviderEditor }: { ProviderEditor: (props: { p:
           {mine.map((x) => (
             <button key={x.id} className={`ms-item ${editing === x.id ? "on" : ""}`} onClick={() => setEditing(x.id)}>
               <Mark id={x.id} name={tr(x.name)} />
-              <span className="ms-item-name">{tr(x.name)}<small>{used(x.id) || (ready(x) ? t("已填 Key") : t("未设置"))}</small></span>
+              <span className="ms-item-name">{tr(x.name)}<small>{used(x.id) || (ready(x) ? (x.free ? t("免费使用") : t("已填 Key")) : t("未设置"))}</small></span>
               <span className={`ms-dot ${ready(x) ? "ok" : "idle"}`} />
             </button>
           ))}
@@ -121,7 +125,7 @@ export function ModelSettings({ ProviderEditor }: { ProviderEditor: (props: { p:
           {agent ? <AgentDetail kind={agent} found={found?.find((f) => f.kind === agent)} p={p ?? agentProvider(agent)} onChange={update} />
             : p ? (
               <>
-                <div className="ms-head"><Mark id={p.id} name={tr(p.name)} size={36} /><div><p className="ms-title">{tr(p.name)}</p><p className="muted small">{p.needsKey ? t("用你自己的 API Key，按用量付费给服务商。Key 只存在本机钥匙串。") : t("在你电脑上运行的模型服务，不需要 Key。")}</p></div></div>
+                <div className="ms-head"><Mark id={p.id} name={tr(p.name)} size={36} /><div><p className="ms-title">{tr(p.name)}</p><p className="muted small">{p.group === "local" ? t("在你电脑上运行的模型服务，不需要 Key。") : p.free ? t("公网上的免费服务，不用 Key，也不用装显卡。") : t("用你自己的 API Key，按用量付费给服务商。Key 只存在本机钥匙串。")}</p></div></div>
                 <ProviderEditor key={p.id} p={p} onChange={update} />
               </>
             ) : null}
@@ -133,7 +137,7 @@ export function ModelSettings({ ProviderEditor }: { ProviderEditor: (props: { p:
           <div className="reading-row">
             <span>{t("问答和导读")}</span>
             <select value={settings.chatProvider} onChange={(e) => void saveSettings({ chatProvider: e.target.value, chatModel: "", modelChosen: true })}>
-              {withCurrent(settings.chatProvider).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {withCurrent(settings.chatProvider, chatChoices).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div className="reading-row">
@@ -143,8 +147,9 @@ export function ModelSettings({ ProviderEditor }: { ProviderEditor: (props: { p:
               {withCurrent(settings.translateProvider).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          {!google && (
-            <>
+          {!google && (translateOnly
+            ? <p className="muted small">{t("这个模型只做翻译，没有「精翻」润色这一步。")}</p>
+            : <>
               <div className="reading-row">
                 <span>{t("翻译方式")}</span>
                 <Seg value={settings.translateQuality} options={[["fast", t("快速")], ["best", t("精翻")]]} onChange={(q) => void saveSettings({ translateQuality: q })} />

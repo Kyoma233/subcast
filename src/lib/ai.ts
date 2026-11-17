@@ -60,6 +60,9 @@ export interface Batch { ids: number[] }
 export function batchShape(provider?: Provider | null): { lines: number; chars: number; before: number; after: number } {
   if (!provider) return { lines: 24, chars: 2600, before: 3, after: 2 };
   if (provider.group === "local") return { lines: 10, chars: 1000, before: 2, after: 1 };
+  // A dedicated translation model keeps no context out of the neighbouring lines (see the payload in translateBatch),
+  // and the free public service cuts off a request its gateway waits too long for: smaller batches, no context.
+  if (provider.translateOnly) return { lines: 12, chars: 1400, before: 0, after: 0 };
   // Local agents (Claude Code and the like) take seconds per request: fewer, larger batches.
   if (provider.protocol === "cli") return { lines: 40, chars: 4000, before: 4, after: 2 };
   if (/deepseek/i.test(provider.id + provider.baseUrl) || provider.protocol === "anthropic") return { lines: 30, chars: 3000, before: 4, after: 2 };
@@ -112,11 +115,15 @@ async function ask(provider: Provider, system: string, payload: unknown, signal?
 export async function translateBatch(provider: Provider, segments: Segment[], batch: Batch, o: TranslateOptions): Promise<Map<number, string>> {
   const shape = batchShape(provider);
   const first = batch.ids[0], last = batch.ids[batch.ids.length - 1];
-  const payload = {
-    contextBefore: segments.slice(Math.max(0, first - shape.before), first).map((s) => s.text).join(" "),
-    lines: batch.ids.map((id) => ({ id, text: segments[id].text })),
-    contextAfter: segments.slice(last + 1, last + 1 + shape.after).map((s) => s.text).join(" "),
-  };
+  const lines = batch.ids.map((id) => ({ id, text: segments[id].text }));
+  // A translation-only model translates whatever is in front of it, neighbouring lines included, which comes back as one
+  // extra id and shifts every line by one: it gets the lines and nothing else.
+  const payload = provider.translateOnly ? { lines }
+    : {
+      contextBefore: segments.slice(Math.max(0, first - shape.before), first).map((s) => s.text).join(" "),
+      lines,
+      contextAfter: segments.slice(last + 1, last + 1 + shape.after).map((s) => s.text).join(" "),
+    };
   const system = translationSystem(o.title, o.show, o.ctx);
   let out = salvage(await ask(provider, system, payload, o.signal), batch.ids);
   // Re-ask only the lines that didn't come back, once, before handing the rest back to the queue.
@@ -131,7 +138,7 @@ export async function translateBatch(provider: Provider, segments: Segment[], ba
     const end = segments[id].text.trim().match(/([.?!])["”')]*$/)?.[1];
     if (end && text && /[\p{L}\p{N}）)」”]$/u.test(text)) out.set(id, text + (end === "?" ? "？" : end === "!" ? "！" : "。"));
   }
-  if (o.polish && out.size) {
+  if (o.polish && out.size && !provider.translateOnly) {
     // Second pass (精翻): a draft per line and the original, made to read naturally. A failure keeps the draft.
     try {
       const lines = [...out].map(([id, draft]) => ({ id, original: segments[id].text, draft }));

@@ -28,9 +28,16 @@ export const NO_AUTO = { autoCapitalize: "off", autoCorrect: "off", spellCheck: 
 export function DefaultButton({ id, isDefault }: { id: string; isDefault: boolean }) {
   const saveSettings = useStore((s) => s.saveSettings);
   const mode = useStore((s) => s.settings.translateMode);
+  // A translation-only model takes the subtitles and leaves questions where they are.
+  const only = useStore((s) => s.settings.providers[id]?.translateOnly);
+  const label = only ? t("用于字幕翻译") : t("设为默认模型");
+  const on = only ? t("当前的翻译模型") : t("当前默认模型");
+  const makeDefault = () => void saveSettings(only
+    ? { translateProvider: id, modelChosen: true, ...(mode === "google" ? { translateMode: "auto" as const } : {}) }
+    : { translateProvider: id, chatProvider: id, chatModel: "", modelChosen: true, ...(mode === "google" ? { translateMode: "auto" as const } : {}) });
   return isDefault
-    ? <p className="default-on small"><Check size={13} /> {t("当前默认模型")}</p>
-    : <button className="btn primary sm" onClick={() => void saveSettings({ translateProvider: id, chatProvider: id, chatModel: "", modelChosen: true, ...(mode === "google" ? { translateMode: "auto" } : {}) })}>{t("设为默认模型")}</button>;
+    ? <p className="default-on small"><Check size={13} /> {on}</p>
+    : <button className="btn primary sm" onClick={makeDefault}>{label}</button>;
 }
 
 function ProviderEditor({ p, onChange }: { p: Provider; onChange: (p: Provider) => void }) {

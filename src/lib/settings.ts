@@ -86,6 +86,12 @@ const o = (id: string, name: string, group: G, baseUrl: string, keyUrl: string |
   ({ id, name, group, protocol: "openai", baseUrl, model: models[0] ?? "", needsKey, keyUrl, models });
 
 export const PRESETS: Provider[] = [
+  // B站 Index-Translate: a free translation model on a public endpoint, no key and no GPU. It only translates, so it is
+  // offered for subtitles and kept out of questions. Two quirks of the service are handled where they matter: it
+  // translates anything handed to it as text (see batchShape in lib/ai.ts, which leaves out the neighbouring lines)
+  // and its gateway gives up on slow requests (see the retry in src-tauri/src/llm.rs).
+  { ...o("bilibili", tk("B站翻译（Index-Translate）"), "provider", "https://index-translate.bilibili.com/v1", "https://github.com/bilibili/Index-Translate",
+    ["Index-Translate-35B-A3B", "Index-Translate-9B", "Index-Translate-2B"], false), free: true, translateOnly: true },
   o("deepseek", "DeepSeek", "provider", "https://api.deepseek.com/v1", "https://platform.deepseek.com/api_keys", ["deepseek-flash", "deepseek-v4-pro"]),
   o("siliconflow", tk("硅基流动"), "relay", "https://api.siliconflow.cn/v1", "https://cloud.siliconflow.cn/account/ak", ["deepseek-ai/deepseek-v4-flash", "deepseek-ai/deepseek-v4-pro"]),
   o("tokendance", "TokenDance", "relay", "https://tokendance.space/gateway/v1", "https://tokendance.space/keys", ["deepseek-v4-flash", "qwen3.8-flash", "kimi-k3"]),
@@ -186,7 +192,7 @@ export async function loadSettings(): Promise<Settings> {
   if (!raw) return structuredClone(DEFAULTS);
   // Keep presets' metadata (key links, suggestions) current while keeping what the user edited.
   const providers: Record<string, Provider> = {};
-  for (const p of PRESETS) providers[p.id] = { ...p, ...(raw.providers?.[p.id] ?? {}), keyUrl: p.keyUrl, models: p.models, needsKey: p.needsKey, name: p.name, group: p.group };
+  for (const p of PRESETS) providers[p.id] = { ...p, ...(raw.providers?.[p.id] ?? {}), keyUrl: p.keyUrl, models: p.models, needsKey: p.needsKey, name: p.name, group: p.group, free: p.free, translateOnly: p.translateOnly };
   const cloudAsr: Record<string, CloudAsr> = {};
   for (const a of ASR_SERVICES) cloudAsr[a.id] = { ...a, ...(raw.cloudAsr?.[a.id] ?? {}), name: a.name, note: a.note, models: a.models, keyUrl: a.keyUrl, needsKey: a.needsKey, protocol: a.protocol };
   return migrate({ ...DEFAULTS, ...raw, providers, cloudAsr });

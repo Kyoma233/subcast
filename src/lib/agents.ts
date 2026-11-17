@@ -50,7 +50,7 @@ async function hasOwnModel(): Promise<boolean> {
   const p = s.providers[s.chatProvider];
   if (!p) return false;
   if (p.protocol === "cli") return true;
-  if (!p.needsKey) return p.group === "local" && s.modelChosen === true;
+  if (!p.needsKey) return p.free === true || (p.group === "local" && s.modelChosen === true);
   return invoke<boolean>("has_api_key", { provider: p.id }).catch(() => false);
 }
 

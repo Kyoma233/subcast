@@ -1,5 +1,6 @@
 //! Streaming chat with the user's own model service: OpenAI-compatible `/chat/completions` (DeepSeek, SiliconFlow,
-//! OpenRouter, Ollama, OpenAI, Kimi…) or Anthropic's Messages API. Keys live in the system keychain.
+//! OpenRouter, Ollama, OpenAI, Kimi…, and B站's free Index-Translate) or Anthropic's Messages API. Keys live in the
+//! system keychain.
 use crate::net;
 use anyhow::{anyhow, Result};
 use futures_util::StreamExt;
@@ -53,6 +54,9 @@ fn opencode_session() -> &'static str {
 
 fn needs_opencode_session(base_url: &str) -> bool { base_url.contains("opencode.ai") }
 
+/// B站's free Index-Translate endpoint (an OpenAI-compatible front for Qwen3.5 translation models).
+fn is_index_translate(base_url: &str) -> bool { base_url.contains("index-translate.bilibili.com") }
+
 fn openai_url(base: &str) -> String {
     let b = base.trim().trim_end_matches('/');
     if b.ends_with("/chat/completions") { b.to_string() } else { format!("{b}/chat/completions") }
@@ -81,25 +85,44 @@ fn api_error(status: u16, body: &str) -> anyhow::Error {
 pub async fn chat(p: &Provider, system: &str, messages: &[Message], max_tokens: u32, json_mode: bool, cancel: &AtomicBool, mut on_delta: impl FnMut(&str)) -> Result<String> {
     let key = get_key(&p.id);
     let anthropic = p.protocol == "anthropic";
-    let req = if anthropic {
-        let key = key.ok_or_else(|| anyhow!("请先在设置里填写 API Key"))?;
-        let msgs: Vec<Value> = messages.iter().map(|m| json!({"role": m.role, "content": m.content})).collect();
-        net::client()
-            .post(anthropic_url(&p.base_url))
-            .header("x-api-key", key)
-            .header("anthropic-version", "2023-06-01")
-            .json(&json!({ "model": p.model, "max_tokens": max_tokens, "system": system, "messages": msgs, "stream": true }))
-    } else {
-        let mut msgs = vec![json!({"role": "system", "content": system})];
-        msgs.extend(messages.iter().map(|m| json!({"role": m.role, "content": m.content})));
-        let mut body = json!({ "model": p.model, "messages": msgs, "stream": true, "max_tokens": max_tokens });
-        if json_mode { body["response_format"] = json!({"type": "json_object"}); }
-        let mut r = net::client().post(openai_url(&p.base_url)).json(&body);
-        if needs_opencode_session(&p.base_url) { r = r.header("x-opencode-session", opencode_session()); }
-        if let Some(k) = key.filter(|k| !k.is_empty()) { r = r.bearer_auth(k); }
-        r
+    let make = || -> Result<reqwest::RequestBuilder> {
+        if anthropic {
+            let key = key.as_deref().ok_or_else(|| anyhow!("请先在设置里填写 API Key"))?;
+            let msgs: Vec<Value> = messages.iter().map(|m| json!({"role": m.role, "content": m.content})).collect();
+            Ok(net::client()
+                .post(anthropic_url(&p.base_url))
+                .header("x-api-key", key)
+                .header("anthropic-version", "2023-06-01")
+                .json(&json!({ "model": p.model, "max_tokens": max_tokens, "system": system, "messages": msgs, "stream": true })))
+        } else {
+            let mut msgs = vec![json!({"role": "system", "content": system})];
+            msgs.extend(messages.iter().map(|m| json!({"role": m.role, "content": m.content})));
+            let mut body = json!({ "model": p.model, "messages": msgs, "stream": true, "max_tokens": max_tokens });
+            if json_mode { body["response_format"] = json!({"type": "json_object"}); }
+            if is_index_translate(&p.base_url) {
+                // A reasoning pass would push the translation out of the answer: the model is trained to answer
+                // directly, and greedy decoding is what its own tooling sends.
+                body["chat_template_kwargs"] = json!({"enable_thinking": false});
+                body["temperature"] = json!(0);
+            }
+            let mut r = net::client().post(openai_url(&p.base_url)).json(&body);
+            if needs_opencode_session(&p.base_url) { r = r.header("x-opencode-session", opencode_session()); }
+            if let Some(k) = key.as_deref().filter(|k| !k.is_empty()) { r = r.bearer_auth(k); }
+            Ok(r)
+        }
     };
-    let res = req.send().await.map_err(|e| anyhow!("连不上模型服务：{e}"))?;
+    // Nothing is on screen yet, so a gateway hiccup is worth one more ask; the free services hand out 502/503/504 under load.
+    let mut attempt = 0u32;
+    let res = loop {
+        let res = make()?.send().await.map_err(|e| anyhow!("连不上模型服务：{e}"))?;
+        let status = res.status();
+        if matches!(status.as_u16(), 502 | 503 | 504) && attempt < 2 && !cancel.load(Ordering::Relaxed) {
+            attempt += 1;
+            tokio::time::sleep(std::time::Duration::from_millis(1200 * attempt as u64)).await;
+            continue;
+        }
+        break res;
+    };
     let status = res.status();
     if !status.is_success() {
         let body = res.text().await.unwrap_or_default();

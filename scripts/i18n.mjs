@@ -4,11 +4,13 @@
 //   node scripts/i18n.mjs --strict   exit 1 when anything is missing (for CI)
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const CJK = /[\u3400-\u9fff]/;
 const walk = (dir) => readdirSync(dir).flatMap((f) => { const p = join(dir, f); return statSync(p).isDirectory() ? walk(p) : [p]; });
-const front = walk(join(root, "src")).filter((f) => /\.(tsx?)$/.test(f) && !f.includes("/locales/"));
+const slash = (p) => p.replaceAll("\\", "/");
+const front = walk(join(root, "src")).filter((f) => /\.(tsx?)$/.test(f) && !slash(f).includes("/locales/"));
 const unescape = (s) => s.replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\`/g, "`").replace(/\\\\/g, "\\");
 
 const keys = new Map(); // key -> where

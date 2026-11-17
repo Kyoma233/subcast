@@ -32,7 +32,7 @@ export function useChatModels(): Group[] | null {
     let live = true;
     // Local agents (Claude Code and the like) have no model of their own set: "" means the agent's default.
     const found = new Set((agents ?? []).filter((f) => f.login !== "needsLogin").map((f) => agentProviderId(f.kind)));
-    const ps = Object.values(settings.providers).filter((p) => p.protocol === "cli" ? found.has(p.id) : p.baseUrl && p.model);
+    const ps = Object.values(settings.providers).filter((p) => !p.translateOnly).filter((p) => p.protocol === "cli" ? found.has(p.id) : p.baseUrl && p.model);
     const inUse = (p: Provider) => p.id === settings.chatProvider || p.id === settings.translateProvider;
     void Promise.all(ps.map((p) => (p.protocol === "cli" ? Promise.resolve(true) : p.needsKey ? api.hasApiKey(p.id) : Promise.resolve(inUse(p))))).then((ok) => {
       if (!live) return;

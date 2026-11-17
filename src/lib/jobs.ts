@@ -114,6 +114,8 @@ function concurrency(p?: Provider | null): { start: number; max: number } {
   if (p.group === "local") return { start: 1, max: 1 };
   if (p.protocol === "cli") return { start: 2, max: 2 };
   if (p.protocol === "anthropic") return { start: 2, max: 4 };
+  // A free public service with a queue in front of it: two at a time keeps every batch well inside its timeout.
+  if (p.translateOnly) return { start: 2, max: 4 };
   if (/deepseek/i.test(p.id + p.baseUrl)) return { start: 4, max: 6 };
   return { start: 3, max: 6 };
 }
@@ -125,6 +127,8 @@ const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((res) => {
 /** The episode's summary and glossary for translation (blob "ctx"), made once per model and notes; the user's own
  *  terms are kept when it is remade. Null when it can't be made: translation goes on without it. */
 export async function episodeContext(ep: Episode, t: Transcript, provider: Provider, signal?: AbortSignal): Promise<EpisodeContext | null> {
+  // A translation-only model has no summary or glossary to give: asking costs a request per episode and returns junk.
+  if (provider.translateOnly) return null;
   const notes = useStore.getState().settings.useShowNotes ? ((await api.fullNotes(ep.id).catch(() => null)) ?? ep.notes ?? "") : "";
   const basis = `${provider.model}|${ep.title}|${notes.length}|${t.segments.length}`;
   let old: EpisodeContext | null = null;

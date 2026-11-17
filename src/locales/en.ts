@@ -950,6 +950,12 @@ const dict: Record<string, string> = {
   "已收藏，在首页「接下来听」里能找到": "Saved. Find it under Up next on the home page.",
   "查看快捷键": "Show shortcuts",
   "问答和翻译分别用不同模型": "Use different models for Q&A and translation",
+  "B站翻译（Index-Translate）": "Bilibili Translate (Index-Translate)",
+  "免费使用": "Free",
+  "公网上的免费服务，不用 Key，也不用装显卡。": "A free public service: no key and no graphics card needed.",
+  "这个模型只做翻译，没有「精翻」润色这一步。": "This model only translates, so there is no second polish pass.",
+  "用于字幕翻译": "Use for subtitles",
+  "当前的翻译模型": "The current translation model",
   "视频地址失效，请稍后再试": "The video address stopped working. Try again later.",
 };
 

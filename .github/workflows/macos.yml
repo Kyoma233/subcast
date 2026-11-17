@@ -1,0 +1,52 @@
+name: macOS build (fork)
+
+# Kyoma233 fork: upstream signs and notarizes macOS on the author's Mac (scripts/release.sh), which a fork can't do.
+# This workflow only builds unsigned dmgs and uploads them as artifacts, so they can be attached to a release by hand.
+# Triggered by a "macos-*" tag, which the main Build workflow does not watch.
+on:
+  push:
+    tags: ["macos-*"]
+  workflow_dispatch:
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-14
+            args: "--target aarch64-apple-darwin"
+          - platform: macos-13
+            args: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.platform }}
+      # whisper.cpp (ggml) uses std::filesystem, which is unavailable below 10.15; 11.0 is Tauri 2's own floor.
+      - name: Deployment target
+        run: echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # No tagName: build only, never touch a release.
+          includeUpdaterJson: false
+          args: ${{ matrix.args }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.platform }}
+          path: |
+            src-tauri/target/**/release/bundle/dmg/*.dmg
+            src-tauri/target/**/release/bundle/macos/*.app
+          if-no-files-found: error

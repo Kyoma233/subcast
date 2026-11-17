@@ -21,6 +21,7 @@ import { activeIndex } from "./components/TranscriptPanel";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { t, useLang } from "./lib/i18n";
 import { EqBars } from "./components/Illustrations";
+import { useIsPhone } from "./lib/phone";
 
 export default function App() {
   const { ready, view, settingsOpen, addOpen, init } = useStore(useShallow((s) => ({ ready: s.ready, view: s.view, settingsOpen: s.settingsOpen, addOpen: s.addOpen, init: s.init })));
@@ -84,10 +85,18 @@ export default function App() {
   }, []);
 
   const { sidebar, sideOpen, put: putLayout } = useLayout();
+  const phone = useIsPhone();
+  // A phone starts with the drawer shut and the subtitle panel closed: the player comes first.
+  useEffect(() => {
+    if (!phone || localStorage.getItem("phone-layout")) return;
+    localStorage.setItem("phone-layout", "1");
+    useLayout.getState().put({ sideOpen: false, panelOpen: false });
+  }, [phone]);
   useLang(); // re-render the tree when the interface language changes
   if (!ready) return <div className="boot" role="status" aria-label={t("正在启动")}><EqBars /></div>;
   return (
-    <div className={`app ${sideOpen ? "" : "side-collapsed"}`} style={{ "--sidebar-w": `${sideOpen ? sidebar : 72}px` } as React.CSSProperties}>
+    <div className={`app ${sideOpen ? "" : "side-collapsed"} ${phone && sideOpen ? "drawer-open" : ""}`} style={{ "--sidebar-w": `${sideOpen ? sidebar : 72}px` } as React.CSSProperties}>
+      {phone && sideOpen && <div className="scrim" onClick={() => putLayout({ sideOpen: false })} />}
       <Sidebar />
       <Splitter value={sideOpen ? sidebar : 72} min={SIDEBAR.min} max={SIDEBAR.max} def={SIDEBAR.def} snap={SIDEBAR.snap} edge="right" label={t("侧栏宽度")} onChange={(w) => putLayout({ sidebar: w, sideOpen: true })} onCollapse={() => putLayout({ sideOpen: false })} />
       <main className="main">

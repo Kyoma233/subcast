@@ -3,9 +3,12 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles.css";
 import { IS_MAC } from "./lib/i18n";
+import { applyPhoneClass } from "./lib/phone";
 
 // Only macOS draws its window buttons inside the page (overlay title bar); Windows and Linux have a native title bar.
 document.documentElement.classList.toggle("is-mac", IS_MAC);
+// Phones use the drawer layout in styles.css.
+applyPhoneClass();
 
 // Never leave a blank window: show startup failures.
 const showFatal = (msg: string) => {

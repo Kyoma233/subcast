@@ -437,10 +437,11 @@ async fn qiaomu_detail(state: State<'_, AppState>, episode_id: String) -> Res<qi
 
 /// Saves a generated image (a quote poster) to Downloads and returns its path.
 #[tauri::command]
-fn save_image(name: String, base64: String) -> Res<String> {
+fn save_image(state: State<'_, AppState>, name: String, base64: String) -> Res<String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD.decode(base64.trim_start_matches("data:image/png;base64,")).map_err(e)?;
-    let dir = dirs::download_dir().or_else(dirs::desktop_dir).ok_or("找不到下载文件夹")?;
+    let dir = dirs::download_dir().or_else(dirs::desktop_dir).unwrap_or_else(|| state.data.join("pictures"));
+    std::fs::create_dir_all(&dir).map_err(e)?;
     let safe: String = name.chars().filter(|c| !"/\\:*?\"<>|".contains(*c)).take(60).collect();
     let mut path = dir.join(format!("{safe}.png"));
     let mut i = 2;
@@ -465,8 +466,8 @@ async fn tts_speak(text: String, voice: String, resource: Option<String>) -> Res
 struct VideoStream { url: String, /** hls | mp4 */ kind: &'static str }
 
 /// Serves the interface on localhost:LOCAL_PORT (what tauri-plugin-localhost did), from the active hot update when
-/// there is one.
-#[cfg(not(debug_assertions))]
+/// there is one. Desktop only: phones load the bundle's own files.
+#[cfg(all(desktop, not(debug_assertions)))]
 fn serve_ui(app: &AppHandle, active: ota::Active) {
     let resolver = app.asset_resolver();
     std::thread::spawn(move || {
@@ -494,6 +495,9 @@ struct UiInfo { shell: &'static str, build: Option<u64> }
 /// The page rendered: a hot update being tried becomes the known-good one.
 #[tauri::command]
 fn ui_ready(state: State<'_, AppState>) -> UiInfo {
+    #[cfg(mobile)]
+    { let _ = &state; return UiInfo { shell: ota::SHELL, build: None }; }
+    #[cfg(desktop)]
     UiInfo { shell: ota::SHELL, build: if cfg!(debug_assertions) { None } else { ota::ready(&state.data) } }
 }
 
@@ -521,12 +525,18 @@ async fn refresh_config(app: AppHandle, state: State<'_, AppState>) -> Res<()> {
 /// Checks for a hot update of the interface; a new one is used from the next launch. none | staged:N | rollback
 #[tauri::command]
 async fn ui_check(app: AppHandle, state: State<'_, AppState>) -> Res<String> {
+    // Phones update through the store, not through signed interface bundles.
+    #[cfg(mobile)]
+    { let _ = (&app, &state); return Ok("none".into()); }
+    #[cfg(desktop)]
+    {
     let pubkey = app.config().plugins.0.get("updater").and_then(|u| u["pubkey"].as_str()).ok_or("缺少更新公钥")?.to_string();
     Ok(match ota::check(&state.data, &pubkey).await.map_err(e)? {
         ota::Outcome::None => "none".into(),
         ota::Outcome::Staged(b) => format!("staged:{b}"),
         ota::Outcome::RolledBack => "rollback".into(),
     })
+    }
 }
 
 /// The direct stream for a video the embedded player can't play. `mode`: "native-hls" (the WebView plays HLS
@@ -633,6 +643,10 @@ fn open_data_folder(app: AppHandle, state: State<'_, AppState>, kind: String) ->
     use tauri_plugin_opener::OpenerExt;
     let dir = match kind.as_str() { "downloads" => offline::dir(&state.data), "models" => asr::models_dir(&state.data), _ => state.data.clone() };
     std::fs::create_dir_all(&dir).map_err(e)?;
+    // A phone has no file browser that can open an app-private directory; the folder still exists for sharing.
+    #[cfg(mobile)]
+    { let _ = (&app, &dir); return Ok(()); }
+    #[cfg(desktop)]
     app.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(e)
 }
 
@@ -641,6 +655,9 @@ fn open_data_folder(app: AppHandle, state: State<'_, AppState>, kind: String) ->
 fn reveal_download(app: AppHandle, state: State<'_, AppState>, episode_id: String) -> Res<()> {
     use tauri_plugin_opener::OpenerExt;
     let saved = offline::find(&state.data, &episode_id).ok_or("没有找到下载的文件")?;
+    #[cfg(mobile)]
+    { let _ = (&app, &saved); return Ok(()); }
+    #[cfg(desktop)]
     app.opener().reveal_item_in_dir(&saved.path).map_err(e)
 }
 
@@ -948,6 +965,10 @@ async fn translate_texts(state: State<'_, AppState>, texts: Vec<String>, target:
 /// The native menu's own items, in the interface language: [settings].
 #[tauri::command]
 fn set_menu_labels(app: AppHandle, labels: Vec<String>) -> Res<()> {
+    #[cfg(mobile)]
+    { let _ = (&app, &labels); return Ok(()); }
+    #[cfg(desktop)]
+    {
     let Some(menu) = app.menu() else { return Ok(()) };
     for sub in menu.items().map_err(e)? {
         let Some(sub) = sub.as_submenu() else { continue };
@@ -956,6 +977,7 @@ fn set_menu_labels(app: AppHandle, labels: Vec<String>) -> Res<()> {
         }
     }
     Ok(())
+    }
 }
 
 // ---- app ------------------------------------------------------------------------------------------------
@@ -963,10 +985,13 @@ fn set_menu_labels(app: AppHandle, labels: Vec<String>) -> Res<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
+    // The whisper recogniser is a child process of this executable; phones cannot start one.
+    #[cfg(desktop)]
     if args.get(1).map(String::as_str) == Some("--asr-worker") {
         std::process::exit(asr::worker_main(&args[2..]));
     }
-    tauri::Builder::default()
+    let _ = &args;
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
@@ -974,6 +999,9 @@ pub fn run() {
             app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
             let data = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data)?;
+            // Phones have no system keychain: provider keys go to a private file in the app's data directory.
+            #[cfg(mobile)]
+            llm::keystore_dir::set(data.clone());
             if let Ok(res) = app.path().resource_dir() { let _ = asr::VCRT_DIR.set(res.join("vcrt")); }
             let conn = db::open(&data.join("subcast.db"))?;
             conn.execute("INSERT OR IGNORE INTO shows(id,kind,title,feed_url,updated_at) VALUES('single','single','单独打开','',0)", [])?;
@@ -981,17 +1009,21 @@ pub fn run() {
                 let _ = net::set_proxy(s["proxy"].as_str().unwrap_or(""));
             }
             // Release builds serve the interface over http://localhost (YouTube refuses tauri://), from a hot
-            // update when one is active (ota.rs), else from the files built into the app.
-            #[cfg(not(debug_assertions))]
+            // update when one is active (ota.rs), else from the files built into the app. Phones load the
+            // built-in files straight from the app bundle and have no hot updates.
+            #[cfg(all(desktop, not(debug_assertions)))]
             let ui: ota::Active = {
                 let active = std::sync::Arc::new(std::sync::RwLock::new(ota::boot(&data)));
                 serve_ui(app.handle(), active.clone());
                 active
             };
-            #[cfg(not(debug_assertions))]
+            #[cfg(all(desktop, not(debug_assertions)))]
             let ui_data = data.clone();
             if let Some(v) = db::get_setting(&conn, "remote-config")?.and_then(|r| serde_json::from_str::<Value>(&r).ok()) { apply_config(&v); }
             app.manage(AppState { db: Mutex::new(conn), data, jobs: Mutex::new(HashMap::new()) });
+            // On phones the single webview comes from tauri.android.conf.json, so only the desktop window is built here.
+            #[cfg(desktop)]
+            {
             #[cfg(debug_assertions)]
             let url = tauri::WebviewUrl::App("index.html".into());
             #[cfg(not(debug_assertions))]
@@ -1026,12 +1058,15 @@ pub fn run() {
                 first.insert_items(&[&sep, &item], 1)?;
             }
             app.set_menu(menu)?;
+            }
             Ok(())
-        })
-        .on_menu_event(|app, event| {
-            if event.id() == "settings" { let _ = app.emit("open-settings", ()); }
-        })
-        .invoke_handler(tauri::generate_handler![
+        });
+    // There is no native menu on phones, so ⌘, is a desktop-only route into the settings.
+    #[cfg(desktop)]
+    let app = app.on_menu_event(|app, event| {
+        if event.id() == "settings" { let _ = app.emit("open-settings", ()); }
+    });
+    app.invoke_handler(tauri::generate_handler![
             add_subscription, refresh_show, refresh_all, list_shows, list_episodes, recent_episodes, get_episode, remove_show,
             set_progress, search_podcasts, search_show, load_transcript, fetch_official_transcript, transcribe, cancel_job, asr_models,
             download_model, delete_model, get_blob, set_blob, get_settings, set_settings, set_api_key, has_api_key, llm_chat, translate_texts, share_translation, ui_ready, ui_check, refresh_config, youtube_stream, prepare_youtube, youtube_tracks, use_youtube_track, qiaomu_detail, preview_show, list_models, tts_speak, cached_show, save_image, set_menu_labels,

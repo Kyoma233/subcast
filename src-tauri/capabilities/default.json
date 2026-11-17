@@ -67,5 +67,10 @@
     "urls": [
       "http://localhost:14327"
     ]
-  }
+  },
+  "platforms": [
+    "linux",
+    "macOS",
+    "windows"
+  ]
 }

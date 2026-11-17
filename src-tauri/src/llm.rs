@@ -9,6 +9,76 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 const KEYRING_SERVICE: &str = "ai.qiaomu.subcast";
 
+/// Where keys live on phones: there is no system keychain to talk to, so they go in a 0600 file inside the app's
+/// private data directory (which no other app can read on Android or iOS).
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub mod keystore_dir {
+    use std::path::PathBuf;
+    use std::sync::OnceLock;
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    pub fn set(dir: PathBuf) { let _ = DIR.set(dir); }
+    pub fn get() -> Option<PathBuf> { DIR.get().cloned() }
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn key_file(provider: &str) -> Option<std::path::PathBuf> {
+    let dir = keystore_dir::get()?.join("keys");
+    let _ = std::fs::create_dir_all(&dir);
+    Some(dir.join(format!("{}.key", provider.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect::<String>())))
+}
+
+pub fn set_key(provider: &str, key: &str) -> Result<()> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let path = key_file(provider).ok_or_else(|| anyhow!("密钥目录未就绪"))?;
+        if key.is_empty() {
+            let _ = std::fs::remove_file(&path);
+        } else {
+            std::fs::write(&path, key)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+            }
+        }
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let entry = keyring::Entry::new(KEYRING_SERVICE, provider)?;
+        if key.is_empty() {
+            let _ = entry.delete_credential();
+        } else {
+            entry.set_password(key)?;
+        }
+        Ok(())
+    }
+}
+
+pub fn get_key(provider: &str) -> Option<String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let path = key_file(provider)?;
+        return std::fs::read_to_string(path).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        keyring::Entry::new(KEYRING_SERVICE, provider).ok()?.get_password().ok()
+    }
+}
+
+/// OpenCode Go/Zen refuses requests without this header (it drives prompt-cache routing).
+/// Any stable value passes; a per-install id from the keychain gives the best cache affinity.
+fn opencode_session() -> &'static str {
+    static ID: once_cell::sync::Lazy<String> = once_cell::sync::Lazy::new(|| {
+        if let Some(v) = get_key("opencode-session").filter(|v| !v.is_empty()) { return v; }
+        let v = uuid::Uuid::new_v4().to_string();
+        let _ = set_key("opencode-session", &v);
+        v
+    });
+    &ID
+}
+
 #[derive(Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Provider {
@@ -22,33 +92,6 @@ pub struct Provider {
 pub struct Message {
     pub role: String,
     pub content: String,
-}
-
-pub fn set_key(provider: &str, key: &str) -> Result<()> {
-    let entry = keyring::Entry::new(KEYRING_SERVICE, provider)?;
-    if key.is_empty() {
-        let _ = entry.delete_credential();
-    } else {
-        entry.set_password(key)?;
-    }
-    Ok(())
-}
-
-pub fn get_key(provider: &str) -> Option<String> {
-    keyring::Entry::new(KEYRING_SERVICE, provider).ok()?.get_password().ok()
-}
-
-/// OpenCode Go/Zen refuses requests without this header (it drives prompt-cache routing).
-/// Any stable value passes; a per-install id from the keychain gives the best cache affinity.
-fn opencode_session() -> &'static str {
-    static ID: once_cell::sync::Lazy<String> = once_cell::sync::Lazy::new(|| {
-        let entry = keyring::Entry::new(KEYRING_SERVICE, "opencode-session").ok();
-        if let Some(v) = entry.as_ref().and_then(|e| e.get_password().ok()).filter(|v| !v.is_empty()) { return v; }
-        let v = uuid::Uuid::new_v4().to_string();
-        if let Some(e) = entry { let _ = e.set_password(&v); }
-        v
-    });
-    &ID
 }
 
 fn needs_opencode_session(base_url: &str) -> bool { base_url.contains("opencode.ai") }

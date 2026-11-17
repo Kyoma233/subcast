@@ -1,6 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, Compass, Download, History, Inbox, Link2, Loader2, PanelLeftClose, PanelLeftOpen, Pause, Play, Plus, Search, Settings as Cog, X } from "lucide-react";
+import { ChevronLeft, Compass, Download, History, Inbox, Link2, Loader2, Menu, PanelLeftClose, PanelLeftOpen, Pause, Play, Plus, Search, Settings as Cog, X } from "lucide-react";
 import { api, errorText, type SearchResult } from "../lib/api";
 import { useStore, type View } from "../store";
 import { hasUpdate, useUpdate } from "../lib/updater";
@@ -112,6 +112,7 @@ export function TopBar() {
   const submit = () => { if (link) void subscribe(q.trim()); else if (results?.[0]) void subscribe(results[0].feedUrl); };
   return (
     <div className="topbar" data-tauri-drag-region>
+      <button className="round-btn only-phone" onClick={() => { const l = useLayout.getState(); l.put({ sideOpen: !l.sideOpen }); }} aria-label={t("菜单")} title={t("菜单")}><Menu size={18} /></button>
       <button className="round-btn" onClick={back} disabled={!history.length} aria-label={t("返回")}><ChevronLeft size={18} /></button>
       <div className="search-wrap">
         <div className={`top-search ${open ? "focus" : ""}`}>

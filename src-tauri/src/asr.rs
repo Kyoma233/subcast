@@ -167,6 +167,14 @@ static INSTALLING: once_cell::sync::Lazy<tokio::sync::Mutex<()>> = once_cell::sy
 
 /// Like `ytdlp`, reporting the first-time download (about 35 MB) so the UI can show it.
 pub async fn ytdlp_with(data: &Path, progress: impl FnMut(u64, Option<u64>)) -> Result<PathBuf> {
+    // Android and iOS cannot execute a downloaded binary, so YouTube's audio fallback has no tool there.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = (data, progress);
+        return Err(anyhow!("手机版不支持下载 YouTube 音频，请改用手动字幕或云端识别"));
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
     let own = data.join("bin").join(exe("yt-dlp"));
     if !own.is_file() {
         let _one = INSTALLING.lock().await;
@@ -181,6 +189,7 @@ pub async fn ytdlp_with(data: &Path, progress: impl FnMut(u64, Option<u64>)) -> 
     let d = data.to_path_buf();
     tokio::spawn(async move { let _ = update_ytdlp(&d, false).await; });
     Ok(own)
+    }
 }
 
 async fn ytdlp_version(bin: &Path) -> Option<String> {
@@ -454,6 +463,16 @@ pub struct WorkerResult {
     pub segments: Vec<Segment>,
 }
 
+/// Mobile builds have no whisper.cpp (it runs as a child process); the caller falls back to a cloud provider.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub async fn run_worker(_audio: &Path, _model: &Path, _language: &str, _prompt: &str, _cancel: Arc<AtomicBool>, _on: impl FnMut(WorkerEvent)) -> Result<WorkerResult> {
+    Err(anyhow!("手机版不能在本机识别，请选云端识别，或使用别人已分享的字幕"))
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn worker_main(_args: &[String]) -> i32 { 1 }
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub async fn run_worker(audio: &Path, model: &Path, language: &str, prompt: &str, cancel: Arc<AtomicBool>, mut on: impl FnMut(WorkerEvent)) -> Result<WorkerResult> {
     let me = std::env::current_exe()?;
     let mut cmd = tokio::process::Command::new(me);
@@ -579,6 +598,7 @@ pub fn resample(input: &[f32], from: u32, to: u32) -> Vec<f32> {
     }).collect()
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn worker_main(args: &[String]) -> i32 {
     let run = || -> Result<()> {
         let [audio, model, language, prompt] = args else { return Err(anyhow!("参数错误")) };

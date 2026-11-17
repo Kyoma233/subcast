@@ -26,3 +26,8 @@ dist-ssr
 # release builds (scripts/release.sh)
 /release/
 src-tauri/windows/vcrt/*.dll
+
+# Android build (Tauri mobile)
+src-tauri/gen/android/app/src/main/jniLibs/
+src-tauri/gen/android/.kotlin/
+src-tauri/gen/schemas/

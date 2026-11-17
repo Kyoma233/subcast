@@ -1436,3 +1436,37 @@ body.tape-seek .seek::-webkit-slider-thumb { border-radius: 3px; width: 12px; he
 .gloss-row .arrow { color: var(--muted); text-align: center; }
 .gloss-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .gloss-foot .spacer { flex: 1; }
+
+/* ---- phones: the Android build, and any window narrower than 760px ---- */
+.only-phone { display: none; }
+.scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, .38); z-index: 55; }
+html.phone body { overscroll-behavior-y: none; }
+html.phone .app { grid-template-columns: minmax(0, 1fr); }
+html.phone .app > .splitter, html.phone .ep-body > .splitter { display: none; }
+html.phone .only-phone { display: inline-flex; }
+/* The sidebar is a drawer over the page, opened from the top bar's menu button. */
+html.phone .sidebar { position: fixed; top: 0; bottom: 0; left: 0; width: min(86vw, 320px); z-index: 60; padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 16px 48px rgba(0, 0, 0, .3); }
+html.phone .app:not(.drawer-open) .sidebar { display: none; }
+html.phone .sidebar.rail { width: min(86vw, 320px); align-items: stretch; padding: 0 10px 10px; }
+html.phone .sidebar.rail .brand-name, html.phone .sidebar.rail .label, html.phone .sidebar.rail .show-names, html.phone .sidebar.rail .unplayed { display: block; }
+html.phone .traffic-space, html.phone :root:not(.is-mac) .traffic-space { height: env(safe-area-inset-top, 8px); }
+html.phone .topbar { height: 54px; padding: 0 10px; gap: 6px; }
+html.phone .topbar .search-wrap { min-width: 0; }
+html.phone .main { min-width: 0; }
+/* The episode page: the player column scrolls the whole page, subtitles open as a full screen sheet. */
+html.phone .ep-body, html.phone .ep-body.panel-collapsed { display: block; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom); }
+html.phone .ep-leftcol { min-height: 100%; }
+html.phone .ep-left { padding: 4px 14px 132px; gap: 14px; }
+html.phone .ep-left > .video, html.phone .ep-left > .audio-stage,
+html.phone .ep-left > .controls-slot, html.phone .ep-left > .controls-dock,
+html.phone .ep-left > .ep-title-block, html.phone .ep-left > .notes { width: 100%; }
+html.phone .ep-right { position: fixed; inset: 0; z-index: 50; border-left: 0; border-top: 0; padding-bottom: env(safe-area-inset-bottom); }
+html.phone .ep-right .tabs { height: calc(52px + env(safe-area-inset-top, 0px)); padding: calc(env(safe-area-inset-top, 0px) + 4px) 10px 0; align-items: flex-end; }
+html.phone .tabs button { padding: 0 10px; }
+html.phone .tabs .tab-label { display: none; }
+html.phone .tabs-close { display: inline-flex; }
+html.phone .audio-stage > img, html.phone .audio-stage > .cover-fallback { width: min(240px, 58vw); }
+html.phone .mini { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); max-width: none; }
+html.phone .poster-layout, html.phone .mf-grid { grid-template-columns: 1fr; }
+html.phone .boot { min-height: 100dvh; }
+html.phone .controls { flex-wrap: wrap; justify-content: center; }

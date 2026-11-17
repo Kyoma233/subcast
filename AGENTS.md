@@ -4,6 +4,7 @@ Read before changing or shipping anything here.
 
 - **Shipping**: [docs/RELEASING.md](docs/RELEASING.md) decides between an interface hot update (`scripts/ui-release.sh`, front end only, no notarization) and an app release (`scripts/release.sh`, anything in `src-tauri/`). Follow it; don't improvise a release.
 - **Architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Server pieces: [server/deploy/README.md](server/deploy/README.md).
+- **Android**: [docs/ANDROID.md](docs/ANDROID.md) — 同一个界面和 Rust 后端编到手机上，以及换掉的几项（本机识别、yt-dlp、钥匙串、界面热更新）。
 - **Checks before a PR**: `npx tsc --noEmit -p .`, `npm run i18n -- --strict`, `cargo test --lib` in `src-tauri`. Interface text goes through `t("中文")` with translations in `src/locales/{en,ja,zh-TW}.ts`.
 - **Git**: short branch → PR → merge commit; never push to `main`.
 - **Tauri commands**: a new command needs the Rust function, `invoke_handler`, `src-tauri/build.rs` COMMANDS and `capabilities/default.json`. That makes it an app release, not a hot update.

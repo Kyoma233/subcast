@@ -1470,3 +1470,13 @@ html.phone .mini { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset
 html.phone .poster-layout, html.phone .mf-grid { grid-template-columns: 1fr; }
 html.phone .boot { min-height: 100dvh; }
 html.phone .controls { flex-wrap: wrap; justify-content: center; }
+/* Phone details: the resume card and the transcript status line wrap instead of squeezing. */
+html.phone .hero { height: auto; padding: 12px; gap: 14px; }
+html.phone .hero > img, html.phone .hero > .cover-fallback { width: 96px; height: 96px; }
+html.phone .hero > img.wide { width: 120px; }
+html.phone .hero-title { font-size: 17px; margin-top: 6px; }
+html.phone .hero-foot { flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+html.phone .hero-foot .muted { white-space: nowrap; }
+html.phone .status-line { padding: 6px 10px; gap: 8px; }
+html.phone .status-line .status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.phone .status-line .btn { flex: none; }
